@@ -233,4 +233,4 @@ Weg: Ordner auf dem Host → ISO bauen → ISO als DVD in die laufende VM einhä
   - Ergebnis: Die Farbpalette zeigt „256 Colors“, die Farbleiste zeigt einen echten Verlauf. Das Startlogo ist ohne Muster.
   - „List All Modes“ meldet 640 × 480, 800 × 600, 1024 × 768 und 1152 × 864, jeweils mit 256 Farben. Die letzten Zeilen habe ich nicht vollständig gelesen.
   - Beim Start weiterhin SCM-Meldung „service or driver failed“ und Dr.-Watson-Fehler (VMware-Reste).
-  - Noch offen: Auflösung 800 × 600 bei 256 Farben setzen (Desktop Area, dann Test). Die Auflösung ist derzeit 640 × 480. Bis dahin gilt: 16 Farben, 640 × 480.
+  - Gesetzt: 800 × 600 bei 256 Farben. Zuerst über „Test“ bestätigt („Did you see the test bitmap properly?“ mit Yes), danach mit OK gespeichert. Danach meldet VBox den Modus `800,600,8`. Ein Neustart mit dieser Einstellung ist noch nicht geprüft.

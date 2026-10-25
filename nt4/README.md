@@ -25,7 +25,7 @@ Notes and sources from bringing up a Windows NT 4.0 SP6 test machine in VirtualB
 - The test program and the window app start on NT 4.
 - Screen: 16 colors at 640x480 (standard VGA) before VBEMP. The Stykker gradients dither in that mode.
 - Tried: the Cirrus Logic 544x and the generic S3 driver from the NT 4 CD. Both install and NT 4 boots, but List All Modes shows only 640x480 and 800x600 at 16 colors.
-- VBE driver VBEMP (third party, archive copy of vbempg.zip, STABLE 2007): installed. The screen switches to 256 colors at 640x480. 800x600 at 256 colors is listed as valid but not set yet.
+- VBE driver VBEMP (third party, archive copy of vbempg.zip, STABLE 2007): installed. The screen switches to 256 colors at 640x480. 800x600 at 256 colors is set and was confirmed with the test dialog. A reboot with this setting is not checked yet.
 
 ## Not included
 
