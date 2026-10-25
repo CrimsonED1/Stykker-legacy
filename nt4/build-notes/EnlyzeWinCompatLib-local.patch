@@ -1,0 +1,22 @@
+diff --git a/src/EnlyzeWinCompatLib.vcxproj b/src/EnlyzeWinCompatLib.vcxproj
+index d0e30f4..3d29b92 100644
+--- a/src/EnlyzeWinCompatLib.vcxproj
++++ b/src/EnlyzeWinCompatLib.vcxproj
+@@ -85,7 +85,7 @@
+       <LanguageStandard>stdcpplatest</LanguageStandard>
+       <RuntimeTypeInfo>false</RuntimeTypeInfo>
+       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+-      <AdditionalOptions>-march=pentium-mmx</AdditionalOptions>
++      <AdditionalOptions>-march=pentium-mmx -Wno-cast-function-type-mismatch</AdditionalOptions>
+       <AdditionalIncludeDirectories>$(ProjectDir)libcxx\src\winpthreads\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+     </ClCompile>
+     <Link>
+@@ -106,7 +106,7 @@
+       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+       <RuntimeTypeInfo>false</RuntimeTypeInfo>
+-      <AdditionalOptions>-flto -march=pentium-mmx</AdditionalOptions>
++      <AdditionalOptions>-flto -march=pentium-mmx -Wno-cast-function-type-mismatch</AdditionalOptions>
+       <AdditionalIncludeDirectories>$(ProjectDir)libcxx\src\winpthreads\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+     </ClCompile>
+     <Link>

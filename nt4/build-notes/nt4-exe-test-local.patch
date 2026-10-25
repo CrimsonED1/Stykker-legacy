@@ -1,0 +1,20 @@
+diff --git a/nt4-exe-test.vcxproj b/nt4-exe-test.vcxproj
+index 30086b7..32f37b8 100644
+--- a/nt4-exe-test.vcxproj
++++ b/nt4-exe-test.vcxproj
+@@ -63,6 +63,7 @@
+       <ConformanceMode>true</ConformanceMode>
+       <AdditionalIncludeDirectories>$(SolutionDir)EnlyzeWinCompatLib\src\libcxx\src\winpthreads\include;$(SolutionDir)EnlyzeWinCompatLib\src\libcxx\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
++      <AdditionalOptions>-march=pentium-mmx %(AdditionalOptions)</AdditionalOptions>
+     </ClCompile>
+     <Link>
+       <SubSystem>Windows</SubSystem>
+@@ -91,6 +92,7 @@
+       <ConformanceMode>true</ConformanceMode>
+       <AdditionalIncludeDirectories>$(SolutionDir)EnlyzeWinCompatLib\src\libcxx\src\winpthreads\include;$(SolutionDir)EnlyzeWinCompatLib\src\libcxx\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
++      <AdditionalOptions>-march=pentium-mmx %(AdditionalOptions)</AdditionalOptions>
+     </ClCompile>
+     <Link>
+       <SubSystem>Windows</SubSystem>
