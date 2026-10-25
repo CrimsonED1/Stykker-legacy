@@ -24,7 +24,7 @@ Notes and sources from bringing up a Windows NT 4.0 SP6 test machine in VirtualB
 - Files reach the VM through an ISO that is mounted in the running VM.
 - The test program and the window app start on NT 4.
 - Screen: 16 colors at 640x480 (standard VGA). The Stykker gradients dither.
-- Tried: the Cirrus Logic 544x driver from the NT 4 CD. It installs and NT 4 boots, but the mode stays at 16 colors.
+- Tried: the Cirrus Logic 544x and the generic S3 driver from the NT 4 CD. Both install and NT 4 boots, but List All Modes shows only 640x480 and 800x600 at 16 colors.
 - Not tried yet: a VBE driver (VBEMP). It is third-party software from outside sites.
 
 ## Not included
