@@ -226,4 +226,11 @@ Weg: Ordner auf dem Host → ISO bauen → ISO als DVD in die laufende VM einhä
 - Versuch 3 (25.10., generischer Treiber „S3 Compatible Graphics Adapter“ von der CD): Die Installation meldet Erfolg, nach dem Neustart erscheint „A new graphics driver has been installed“. „List All Modes“ zeigt wieder nur 640 × 480 und 800 × 600 mit 16 Farben.
 - Stand nach Versuch 3: Beide Chip-Treiber (Cirrus, S3) sind eingetragen. VGA ist noch nicht wiederhergestellt. Beim Start erscheint „Invalid Display Settings“, dazu Dr.-Watson- und SCM-Meldungen (VMware-Reste).
 - Ergebnis: Die Chip-Treiber von der NT4-CD bringen auf `vboxvga` keine höhere Farbtiefe. Nächster Kandidat ist ein VBE-Treiber (VBEMP, Drittanbieter). Er ist nicht heruntergeladen und braucht eine Zustimmung zur Quelle.
-- Offen: Ob die VBox-Grafik (`vboxvga`) mehr Modi anbietet, wenn man sie anders konfiguriert. Bis dahin gilt: 16 Farben, 640 × 480.
+- **Versuch 4 (25.10., VBE-Treiber, Erfolg):** „AnaPa Corp VBE Miniport“ aus `vbempg.zip` (VBEMP, STABLE, Stand 19.10.2007).
+  - Quelle: Archiv-Kopie `https://web.archive.org/web/20170922115520/http://bearwindows.boot-land.net/vbempg.zip`. Die Originaldomain `bearwindows.boot-land.net` löst nicht mehr auf.
+  - Größe 126.243 Byte, SHA-256 `675a47c1f1eefb1c1d760e037844cd0d9e052d4afa5085403c32e302849328a0`.
+  - Verwendet: `VBE30\NT4\vbemp.sys` und `vbemp4.inf`. Im Display Type mit „Change… → Have Disk…“ von `D:\VBE30\NT4` (ISO `S:\workspace\nt4\apps7.iso`, gebaut aus `S:\workspace\nt4\vbemp-iso`). Die NT-Warnung „third-party driver“ mit Yes bestätigt, danach Neustart.
+  - Ergebnis: Die Farbpalette zeigt „256 Colors“, die Farbleiste zeigt einen echten Verlauf. Das Startlogo ist ohne Muster.
+  - „List All Modes“ meldet 640 × 480, 800 × 600, 1024 × 768 und 1152 × 864, jeweils mit 256 Farben. Die letzten Zeilen habe ich nicht vollständig gelesen.
+  - Beim Start weiterhin SCM-Meldung „service or driver failed“ und Dr.-Watson-Fehler (VMware-Reste).
+  - Noch offen: Auflösung 800 × 600 bei 256 Farben setzen (Desktop Area, dann Test). Die Auflösung ist derzeit 640 × 480. Bis dahin gilt: 16 Farben, 640 × 480.
