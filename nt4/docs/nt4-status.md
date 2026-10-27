@@ -136,6 +136,9 @@ Alias für die Beispiele: `VBM` = `"C:\Program Files\Oracle\VirtualBox\VBoxManag
 ## 7. Dateien aus diesem Testlauf (`S:\workspace\`)
 - `nt4_*.png` sind Screenshots. Können nach Durchsicht gelöscht werden.
 - Backup-VMDK: siehe Abschnitt 1.
+- `S:\workspace\nt4\apps*.iso` (`apps.iso` … `apps9.iso`): Transfer-ISOs, die Ordner `apps*` sind ihre Quellen. `apps7.iso` = VBEMP-Treiber, `apps8.iso` = erste `NT4LITE.EXE` (mit SSE, stürzt ab), `apps9.iso` = funktionierende `NT4LITE.EXE` (derzeit eingehängt). Die älteren können weg.
+- `S:\workspace\nt4\src\nt4-blazor`: Blazor-Testapp (Abschnitt 11 und 12). `S:\workspace\nt4\src\nt4-lite`: litehtml-App. `S:\workspace\nt4\src\litehtml`: litehtml-Quelltext (Abschnitt 12).
+- `S:\workspace\nt4\tools\vm-keys.ps1`: schickt Tasten (Scancodes, Text, Wartezeit) an die VM und macht auf Wunsch einen Screenshot nach `S:\workspace\nt4\shots`. Beispiel: `.\vm-keys.ps1 -Steps "k:1d 01 81 9d","w:600","k:13 93","t:cmd","k:1c 9c" -Shot run1` (Ctrl+Esc, R, `cmd`, Enter).
 
 ---
 
@@ -153,6 +156,7 @@ Weg: Ordner auf dem Host → ISO bauen → ISO als DVD in die laufende VM einhä
    & 'C:\Program Files\Oracle\VirtualBox\VBoxManage.exe' storageattach "NT4_SP6-New" --storagectl IDE --port 1 --device 0 --type dvddrive --medium 'S:\workspace\nt4\apps.iso'
    ```
 4. Im Gast im cmd: `dir D:\`. Die Dateien liegen im Wurzelverzeichnis von `D:`.
+5. Kopieren mit `copy D:\DATEI.EXE C:\`. Das NT4-`copy` kennt kein `/y`. Existiert die Zieldatei, fragt es nach, deshalb besser einen neuen Zielnamen nehmen.
 
 **Hinweis:** Die SP1-Installations-CD ist seit 25.10. nicht mehr eingehängt. Sie liegt weiter unter `S:\workspace\nt4\iso\en_winnt4_wks_sp1.iso`. Für weitere Treiberinstallationen wieder mit dem Befehl aus Schritt 3 einhängen.
 
@@ -195,8 +199,8 @@ Weg: Ordner auf dem Host → ISO bauen → ISO als DVD in die laufende VM einhä
 - Neu gebaut mit `/p:VCToolsVersion=14.38.33130`, alle Bibliotheken neu.
 - Der Start-Code `__scrt_common_main_seh` enthält keine SSE-Befehle mehr. Der Absturz ist weg.
 - **Test in NT4 erfolgreich:** `D:\NT4TEST.EXE` startet, zeigt das Meldungsfenster „Hello from 2024!“, lässt sich schließen und kehrt zum Prompt zurück.
-- Die Funktionen für Mathematik (`log10`, `ceil`) enthalten weiterhin SSE. Sie sind nur in der Laufzeit, aber nicht im Start. Beim Aufruf könnte ein Absturz kommen. Das ist noch nicht getestet.
-- ISO-Stand: `S:\workspace\nt4\apps6.iso` (eingehängt, enthält `NT4WIN.EXE`, siehe Abschnitt 10).
+- Die Funktionen für Mathematik (`log10`, `ceil`) enthalten weiterhin SSE. Sie sind nur in der Laufzeit, aber nicht im Start. **Update 27.10.:** Bestätigt für die UCRT-Gleitkommafunktionen (printf `%f`, strtod, Runden, `pow`, fenv). Gelöst mit `nt4_crt.cpp`, siehe Abschnitt 12. `log10` selbst wählt seinen Weg per CPU-Prüfung und ist nicht einzeln getestet.
+- ISO-Stand: `S:\workspace\nt4\apps6.iso` enthält `NT4WIN.EXE` (Abschnitt 10). Seit 27.10. ist `apps9.iso` eingehängt (`NT4LITE.EXE`, Abschnitt 12).
 - Das Patch-Skript `patch_exe_os_version.ps1` aus dem ENLYZE-Branch setzt nur die Versionsfelder, die bei uns schon stimmen. Es ist für den SSE-Fehler nicht relevant.
 - `Dependencies` (lucasg.Dependencies) ist installiert und freigegeben, aber noch nicht gegen die EXE gelaufen. Bisher wurde `dumpbin` genutzt.
 

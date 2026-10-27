@@ -8,6 +8,7 @@ Notes and sources from bringing up a Windows NT 4.0 SP6 test machine in VirtualB
 |---|---|
 | `docs/nt4-status.md` | Status log: VM facts, keyboard control through VBoxManage scancodes, network, file transfer, build state, display research. Start here. |
 | `tools/make-iso.ps1` | Builds an ISO from a folder (IMAPI2FS). The ISO is mounted as a DVD in the running VM, which is how files get in. |
+| `tools/vm-keys.ps1` | Sends scancodes or text to the VM through VBoxManage and takes a screenshot. This is how the VM was operated. |
 | `window/main.cpp`, `window/nt4-window.vcxproj` | Win32/GDI window app with the Stykker design tokens. Built with clang-cl against ENLYZE. |
 | `build-notes/*.patch` | Local changes to third-party sources, as patches. The sources themselves are not in this repo. |
 | `lite/` | `NT4LITE.EXE`: Win32 app with litehtml as an embedded HTML view (GDI drawing, HTTP over Winsock, meta refresh, accesskey links). `nt4_crt.cpp` replaces UCRT float/rounding functions that use SSE. `litehtml-nt4.vcxproj` builds litehtml for NT 4. |
