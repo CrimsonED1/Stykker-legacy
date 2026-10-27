@@ -1,4 +1,4 @@
-# NT4 SP6 VM – Dokumentation (korrigiert, Stand 2026-10-27, Netzwerk, 16 Bit, Opera, litehtml)
+# NT4 SP6 VM – Dokumentation (korrigiert, Stand 2026-10-27, Netzwerk, 16 Bit, Opera, litehtml, SVG)
 
 Dieser Stand ersetzt die Fassung von 2026-10-24. Die Punkte wurden am 25.10. im Live-Test geprüft.
 
@@ -296,3 +296,41 @@ Weg: Ordner auf dem Host → ISO bauen → ISO als DVD in die laufende VM einhä
 - Größe: `NT4LITE.EXE` etwa 1,6 MB (statisch gelinkt, litehtml + libc++).
 
 **Grenzen:** Kein JavaScript, keine Bilder, keine Formulare (litehtml zeichnet Eingabefelder nicht selbst). Jede Aktualisierung lädt die ganze Seite neu und rendert sie komplett. Bei dieser Seitengröße ist das unauffällig.
+
+---
+
+## 13. SVG-Charts, Achsanzeige und Geschwindigkeit (27.10.)
+
+**SVG in NT4LITE:** nanosvg (zlib-Lizenz, `github.com/memononen/nanosvg`, Commit `239e102`, nach `S:\workspace\nt4\src\nanosvg`) ist in `main.cpp` eingebunden. `<img src="...svg">` wird per HTTP geladen, mit `nsvgParse` gelesen, mit `nsvgRasterize` in der Zielgröße gerastert und per Hand in den Hintergrund geblendet (NT4 hat kein `AlphaBlend`). Text in SVG kann nanosvg nicht, Beschriftungen stehen im HTML.
+- nanosvg nutzt `strtoll` und `sscanf`. Beide enthalten in der UCRT SSE. `sscanf` ersetzt `nt4_crt.cpp` (`__stdio_common_vsscanf`, nur Ganzzahlen). `strtoll` lässt sich nicht direkt ersetzen, weil sein UCRT-Objekt auch `strtol`/`atoi` enthält (doppelte Symbole). Deshalb leitet `main.cpp` nanosvgs `strtoll` per `#define` auf `nt4_strtoll` um.
+- SSE-Prüfung danach: Es bleiben nur Funktionen mit CPU-Prüfung (`memmove`, `memset`, `strstr`, `strchr`, `wcslen`, `sin`/`cos`/`acos`/`tan`) und Fehlerpfade der x87-Mathematik.
+
+**Serverseite:**
+- `LiteChartData` (BackgroundService): Lastkurve mit 40 Werten, jede Sekunde ein neuer Wert, dazu 6 Balken. `GET /lite/line.svg` und `/lite/bars.svg` liefern SVG ohne Text.
+- `/lite` zeigt Timer, Linien- und Balkenchart und lädt jede Sekunde neu.
+- `GET /lite/axes?ms=200`: Achsanzeige X/Y/Z (mm) und A (°). Die Werte rechnet der Server bei jeder Anfrage aus der Uhrzeit (Sinus). Der Takt ist per Link umschaltbar (1000, 500, 200, 100, 50 ms, Tasten 1–5), Taste B führt zurück, A öffnet die Seite von `/lite` aus.
+
+**Zeitmessung in der App:** Die Titelleiste zeigt den letzten Durchlauf in ms:
+`L` Laden gesamt (Verbindung/erste Antwort), `B` Bilder, `P` Parsen, `Lay` Layout, `Z` Zeichnen in den Puffer, `Blit` Kopie auf den Bildschirm (ms / Tausend Pixel), `Takt` Abstand zwischen zwei Durchläufen.
+`NT4LITE.EXE -bench <datei.html>` parst eine lokale Datei 20-mal und schreibt den Schnitt nach `<datei.html>.txt` (nur zum Messen).
+
+**Optimierungen:**
+- Doppelpuffer mit Vergleich: zwei 32-Bit-DIBs. Nach dem Zeichnen werden nur geänderte Zeilen-/Spaltenbereiche auf den Bildschirm kopiert. Fensterfreilegungen kommen ohne neues Zeichnen aus dem vorderen Puffer.
+- Schriften bleiben über alle Aktualisierungen im Cache (vorher bei jeder Seite neu angelegt).
+
+**Messungen Achsenseite (200 ms Soll-Takt):**
+
+| | Host (Windows 11) | NT4-VM vorher | NT4-VM nachher |
+|---|---|---|---|
+| Laden | 0–5 ms | ~105 ms | ~109 ms (Verbindung 54, Antwort 32) |
+| Parsen + Layout | ~10–45 ms (schwankt) | 160–220 ms | ~231 ms |
+| Zeichnen | 2–3 ms | 300–380 ms (inkl. Bildschirm) | 60 ms + Bildschirm 1 ms (17k Pixel) |
+| Takt | ~250 ms | ~1000 ms | ~720 ms |
+
+Seite mit SVG-Charts in der VM: Laden 104, Bilder 286, Parsen 131, Zeichnen 303 ms, Takt ~2,7 s.
+
+**Hauptursache der Langsamkeit:** `VBox.log` meldet „HM: … VT-x is not available“ und „NEM: Snail execution mode is active!“. Auf dem Host ist Hyper-V aktiv (z. B. WSL2, Docker, Speicherintegrität/VBS). VirtualBox kann VT-x dann nicht selbst nutzen und läuft über die Hyper-V-Schnittstelle im langsamen Modus, mit über 1,4 Mrd. VM-Exits seit dem Start. Die VM rechnet dadurch etwa 20- bis 30-mal langsamer als der Host. Ohne Hyper-V (`bcdedit /set hypervisorlaunchtype off` + Neustart, betrifft WSL2/Docker/VBS) liefe die VM mit VT-x. Das ist nicht geändert und nicht getestet.
+
+**Offen:**
+- Der Farbverlauf im SVG (Fläche unter der Linie, Balkenverlauf) wird von nanosvg/der Blend-Routine nicht sichtbar dargestellt. Die Balken erscheinen einfarbig, die Fläche fehlt.
+- Jede Aktualisierung parst die ganze Seite neu, inklusive Standard-Stylesheet von litehtml. Schneller ginge es mit Keep-Alive-Verbindungen (spart ~50 ms Verbindungsaufbau), einem einmal geparsten Standard-Stylesheet (Patch an litehtml) oder einem reinen Datenkanal, der nur Werte im bestehenden Dokument tauscht (litehtml sieht das nicht vor).

@@ -42,8 +42,11 @@ Notes and sources from bringing up a Windows NT 4.0 SP6 test machine in VirtualB
 
 - `lite/NT4LITE.EXE` renders `GET /lite` from the Blazor app with litehtml. The page is static SSR without script. A server-side timer drives a progress bar, and the page sets its own refresh rate with `<meta http-equiv="refresh">`. Tested on NT 4: start from the app (key S), pause from the host, the NT 4 view follows.
 - The static UCRT from Windows SDK 10.0.26100 uses SSE in printf/strtod float code, rounding, `pow` and fenv without a CPU check. NT 4 never enables SSE, so those calls crash with "illegal instruction". `lite/nt4_crt.cpp` provides x87 versions that the linker picks before the UCRT objects. Check a build with `llvm-objdump -d` for `xmm` and map hits with `llvm-symbolizer`.
-- Build layout: `lite/` expects `../litehtml` (litehtml commit `7ea2956`), `../nt4-exe-test/EnlyzeWinCompatLib` and `../build/Release/...` next to it, as in the window app. Build `litehtml-nt4.vcxproj` first, then `nt4-lite.vcxproj`.
-- Limits: no JavaScript, no images, no form controls. Each refresh reloads and re-renders the whole page.
+- Build layout: `lite/` expects `../litehtml` (litehtml commit `7ea2956`), `../nanosvg` (nanosvg commit `239e102`), `../nt4-exe-test/EnlyzeWinCompatLib` and `../build/Release/...` next to it, as in the window app. Build `litehtml-nt4.vcxproj` first, then `nt4-lite.vcxproj`.
+- SVG images: `<img src="*.svg">` is loaded over HTTP and drawn with nanosvg (no text inside SVG). `/lite` shows a live line chart and a bar chart from `LiteChartData`. `/lite/axes?ms=200` shows four axis positions with a selectable refresh interval.
+- The title bar shows the timing of the last cycle: load (connect/answer), images, parse, layout, draw, blit (ms / thousand pixels), cycle. Only changed screen areas are copied to the window, and fonts are cached across refreshes.
+- Speed in this VM: the axis page needs about 720 ms per cycle (load ~110, parse ~230, draw ~60, blit ~1 ms), the chart page about 2.7 s. The host runs Hyper-V, so VirtualBox falls back to NEM "snail execution mode" and the guest runs 20 to 30 times slower than the host. Details in `docs/nt4-status.md`, section 13.
+- Limits: no JavaScript, no form controls, SVG only for images. Each refresh reloads and re-renders the whole page.
 
 ## Not included
 

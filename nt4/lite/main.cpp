@@ -8,9 +8,18 @@
 
 #include <litehtml.h>
 
+// nanosvg uses strtoll, whose UCRT version contains SSE (see nt4_crt.cpp).
+extern "C" long long __cdecl nt4_strtoll(const char* s, char** end, int base);
+#define strtoll nt4_strtoll
+#define NANOSVG_IMPLEMENTATION
+#define NANOSVGRAST_IMPLEMENTATION
+#include <nanosvg.h>
+#include <nanosvgrast.h>
+
 #include <string>
 #include <vector>
 #include <set>
+#include <map>
 #include <memory>
 
 namespace
@@ -18,6 +27,7 @@ namespace
     const wchar_t* kClassName  = L"StykkerNT4Lite";
     const char*    kDefaultUrl = "http://192.168.178.146:5080/lite";
     const UINT     WM_APP_NAVIGATE = WM_APP + 1;
+    const UINT     WM_APP_REDRAW   = WM_APP + 2;
     const UINT_PTR kRefreshTimer   = 1;
 
     // ---------------------------------------------------------------- strings
@@ -55,6 +65,16 @@ namespace
         size_t a = s.find_first_not_of(" \t\r\n\"'");
         size_t b = s.find_last_not_of(" \t\r\n\"'");
         return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
+    }
+
+    double NowMs()
+    {
+        static LARGE_INTEGER freq = {};
+        if (!freq.QuadPart)
+            QueryPerformanceFrequency(&freq);
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        return (double)now.QuadPart * 1000.0 / (double)freq.QuadPart;
     }
 
     // ---------------------------------------------------------------- URLs
@@ -124,8 +144,15 @@ namespace
         return Trim(headers.substr(pos, end == std::string::npos ? std::string::npos : end - pos));
     }
 
+    // Split of the last request: TCP connect, first response byte after the request, end of data.
+    struct HttpTiming
+    {
+        double connect = 0, firstByte = 0, rest = 0;
+    } g_lastHttp;
+
     bool HttpGetOnce(const std::string& url, HttpResponse& resp, std::string& error)
     {
+        double t0 = NowMs();
         Url u;
         if (!ParseUrl(url, u))
         {
@@ -168,18 +195,26 @@ namespace
                               "Host: " + u.host + ":" + std::to_string(u.port) + "\r\n"
                               "User-Agent: StykkerNT4Lite/0.1\r\n"
                               "Connection: close\r\n\r\n";
+        double t1 = NowMs();
         send(s, request.c_str(), (int)request.size(), 0);
 
         std::string raw;
         char        buf[4096];
+        double      t2 = 0;
         for (;;)
         {
             int n = recv(s, buf, sizeof(buf), 0);
             if (n <= 0)
                 break;
+            if (raw.empty())
+                t2 = NowMs();
             raw.append(buf, n);
         }
         closesocket(s);
+        double t3 = NowMs();
+        g_lastHttp.connect   = t1 - t0;
+        g_lastHttp.firstByte = t2 ? t2 - t1 : t3 - t1;
+        g_lastHttp.rest      = t2 ? t3 - t2 : 0;
 
         size_t split = raw.find("\r\n\r\n");
         if (split == std::string::npos)
@@ -224,6 +259,29 @@ namespace
     int                     g_clientW = 0;
     int                     g_clientH = 0;
 
+    // Timing of the last load cycle, shown in the title bar.
+    std::string g_title;
+    double      g_msFetch  = 0;
+    double      g_msImages = 0;
+    double      g_msLayout = 0;
+    double      g_msParse  = 0;  // HTML + CSS into a litehtml document
+    double      g_msDraw   = 0;  // litehtml into the back buffer
+    double      g_msBlit   = 0;  // changed areas to the screen
+    int         g_blitKpx  = 0;  // copied to the screen, in 1000 pixels
+    double      g_msCycle  = 0;
+    LONGLONG    g_lastNavigate = 0;
+    HttpTiming  g_pageHttp;
+
+    void UpdateTitle()
+    {
+        // Short form, so it fits the title bar (ms): load (connect/answer), images, layout, draw, blit, cycle.
+        char stats[200];
+        snprintf(stats, sizeof(stats), "L %d (%d/%d) B %d P %d Lay %d Z %d Blit %d/%dk Takt %d - ", (int)g_msFetch,
+                 (int)g_pageHttp.connect, (int)g_pageHttp.firstByte, (int)g_msImages, (int)g_msParse, (int)g_msLayout,
+                 (int)g_msDraw, (int)g_msBlit, g_blitKpx, (int)g_msCycle);
+        SetWindowTextW(g_hwnd, Widen(stats + g_title).c_str());
+    }
+
     // ---------------------------------------------------------------- GDI container
 
     COLORREF ToColorRef(const litehtml::web_color& c)
@@ -259,6 +317,10 @@ namespace
 
         ~GdiContainer()
         {
+            for (auto& f : m_fonts)
+                DeleteObject(f.second.font);
+            m_images.clear();
+            nsvgDeleteRasterizer(m_rast);
             DeleteDC(m_hdc);
         }
 
@@ -273,9 +335,27 @@ namespace
             lf.lfUnderline = (descr.decoration_line & litehtml::text_decoration_line_underline) != 0;
             lf.lfStrikeOut = (descr.decoration_line & litehtml::text_decoration_line_line_through) != 0;
             lf.lfCharSet   = DEFAULT_CHARSET;
-            HFONT font     = CreateFontIndirectW(&lf);
 
-            if (fm)
+            // Every refresh builds a new document. Fonts are kept across documents, because
+            // creating GDI fonts is a large part of the layout time.
+            std::wstring key = std::wstring(lf.lfFaceName) + L"|" + std::to_wstring(lf.lfHeight) + L"|" +
+                               std::to_wstring(lf.lfWeight) + L"|" + std::to_wstring(lf.lfItalic) +
+                               std::to_wstring(lf.lfUnderline) + std::to_wstring(lf.lfStrikeOut);
+            auto cached = m_fonts.find(key);
+            if (cached != m_fonts.end())
+            {
+                if (fm)
+                {
+                    *fm           = cached->second.metrics;
+                    fm->font_size = descr.size;
+                }
+                return (litehtml::uint_ptr)cached->second.font;
+            }
+
+            HFONT font = CreateFontIndirectW(&lf);
+            CachedFont entry;
+            entry.font = font;
+            litehtml::font_metrics* out = fm ? fm : &entry.metrics;
             {
                 HGDIOBJ    old = SelectObject(m_hdc, font);
                 TEXTMETRICW tm = {};
@@ -285,23 +365,23 @@ namespace
                 GetTextExtentPoint32W(m_hdc, L"x", 1, &x);
                 SelectObject(m_hdc, old);
 
-                fm->font_size   = descr.size;
-                fm->ascent      = (int)tm.tmAscent;
-                fm->descent     = (int)tm.tmDescent;
-                fm->height      = (int)tm.tmHeight;
-                fm->x_height    = (int)tm.tmAscent / 2;
-                fm->ch_width    = (int)zero.cx;
-                fm->draw_spaces = lf.lfUnderline || lf.lfStrikeOut;
-                fm->sub_shift   = descr.size / 5;
-                fm->super_shift = descr.size / 3;
+                out->font_size   = descr.size;
+                out->ascent      = (int)tm.tmAscent;
+                out->descent     = (int)tm.tmDescent;
+                out->height      = (int)tm.tmHeight;
+                out->x_height    = (int)tm.tmAscent / 2;
+                out->ch_width    = (int)zero.cx;
+                out->draw_spaces = lf.lfUnderline || lf.lfStrikeOut;
+                out->sub_shift   = descr.size / 5;
+                out->super_shift = descr.size / 3;
             }
+            entry.metrics = *out;
+            m_fonts[key]  = entry;
             return (litehtml::uint_ptr)font;
         }
 
-        void delete_font(litehtml::uint_ptr font) override
-        {
-            DeleteObject((HFONT)font);
-        }
+        // Fonts stay in the cache until the app ends.
+        void delete_font(litehtml::uint_ptr) override {}
 
         litehtml::pixel_t text_width(const char* text, litehtml::uint_ptr font) override
         {
@@ -352,17 +432,99 @@ namespace
             RestoreDC(dc, saved);
         }
 
-        void load_image(const char*, const char*, bool) override {}
+        // Images: SVG only, parsed with nanosvg and rasterized per drawn size.
+        void load_image(const char* src, const char* baseurl, bool) override
+        {
+            std::string url = ImageUrl(src, baseurl);
+            if (m_images.count(url))
+                return;
+            double       t0  = NowMs();
+            auto         img = std::make_unique<SvgImage>();
+            HttpResponse resp;
+            std::string  error;
+            if (HttpGet(url, resp, error) && resp.status == 200 && resp.body.find("<svg") != std::string::npos)
+            {
+                std::vector<char> text(resp.body.begin(), resp.body.end());
+                text.push_back('\0');
+                img->svg = nsvgParse(text.data(), "px", 96.0f);
+            }
+            m_images[url] = std::move(img);
+            g_msImages += NowMs() - t0;
+        }
 
-        void get_image_size(const char*, const char*, litehtml::size& sz) override
+        void get_image_size(const char* src, const char* baseurl, litehtml::size& sz) override
         {
             sz.width  = 0;
             sz.height = 0;
+            auto it   = m_images.find(ImageUrl(src, baseurl));
+            if (it != m_images.end() && it->second->svg)
+            {
+                sz.width  = (int)it->second->svg->width;
+                sz.height = (int)it->second->svg->height;
+            }
         }
 
-        void draw_image(litehtml::uint_ptr, const litehtml::background_layer&, const std::string&,
-                        const std::string&) override
+        void draw_image(litehtml::uint_ptr hdc, const litehtml::background_layer& layer, const std::string& url,
+                        const std::string& base_url) override
         {
+            auto it = m_images.find(ImageUrl(url.c_str(), base_url.c_str()));
+            if (it == m_images.end() || !it->second->svg)
+                return;
+            SvgImage& img = *it->second;
+            int       x = (int)layer.origin_box.x, y = (int)layer.origin_box.y;
+            int       w = (int)layer.origin_box.width, h = (int)layer.origin_box.height;
+            if (w <= 0 || h <= 0 || img.svg->width <= 0 || img.svg->height <= 0)
+                return;
+
+            if (img.rw != w || img.rh != h)
+            {
+                img.rgba.assign((size_t)w * h * 4, 0);
+                float sx = w / img.svg->width, sy = h / img.svg->height;
+                nsvgRasterize(m_rast, img.svg, 0, 0, sx < sy ? sx : sy, img.rgba.data(), w, h, w * 4);
+                img.rw = w;
+                img.rh = h;
+            }
+
+            // NT 4 has no AlphaBlend: copy the target area into a 32-bit DIB, blend there, copy back.
+            BITMAPINFO bi              = {};
+            bi.bmiHeader.biSize        = sizeof(bi.bmiHeader);
+            bi.bmiHeader.biWidth       = w;
+            bi.bmiHeader.biHeight      = -h;
+            bi.bmiHeader.biPlanes      = 1;
+            bi.bmiHeader.biBitCount    = 32;
+            bi.bmiHeader.biCompression = BI_RGB;
+            void*   bits = nullptr;
+            HBITMAP dib  = CreateDIBSection((HDC)hdc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+            if (!dib)
+                return;
+            HDC     mem = CreateCompatibleDC((HDC)hdc);
+            HGDIOBJ old = SelectObject(mem, dib);
+            BitBlt(mem, 0, 0, w, h, (HDC)hdc, x, y, SRCCOPY);
+            GdiFlush();
+
+            unsigned char*       dst = (unsigned char*)bits;
+            const unsigned char* src = img.rgba.data();
+            for (int i = 0; i < w * h; ++i, dst += 4, src += 4)
+            {
+                unsigned a = src[3];
+                if (!a)
+                    continue;
+                dst[0] = (unsigned char)((src[2] * a + dst[0] * (255 - a)) / 255);
+                dst[1] = (unsigned char)((src[1] * a + dst[1] * (255 - a)) / 255);
+                dst[2] = (unsigned char)((src[0] * a + dst[2] * (255 - a)) / 255);
+            }
+
+            int saved = BeginLayerClip((HDC)hdc, layer);
+            BitBlt((HDC)hdc, x, y, w, h, mem, 0, 0, SRCCOPY);
+            RestoreDC((HDC)hdc, saved);
+            SelectObject(mem, old);
+            DeleteDC(mem);
+            DeleteObject(dib);
+        }
+
+        void ClearImages()
+        {
+            m_images.clear();
         }
 
         void draw_solid_fill(litehtml::uint_ptr hdc, const litehtml::background_layer& layer,
@@ -442,7 +604,7 @@ namespace
 
         void set_caption(const char* caption) override
         {
-            SetWindowTextW(g_hwnd, (L"Stykker Lite - " + Widen(caption)).c_str());
+            g_title = std::string("Stykker Lite - ") + caption;
         }
 
         void set_base_url(const char* base_url) override
@@ -611,6 +773,32 @@ namespace
             return pts.back().color;
         }
 
+        struct SvgImage
+        {
+            NSVGimage*                 svg = nullptr;
+            std::vector<unsigned char> rgba;
+            int                        rw = 0, rh = 0;
+            ~SvgImage()
+            {
+                if (svg)
+                    nsvgDelete(svg);
+            }
+        };
+
+        static std::string ImageUrl(const char* src, const char* baseurl)
+        {
+            return ResolveUrl(baseurl && *baseurl ? baseurl : g_baseUrl, src ? src : "");
+        }
+
+        struct CachedFont
+        {
+            HFONT                  font = nullptr;
+            litehtml::font_metrics metrics;
+        };
+
+        std::map<std::wstring, CachedFont>               m_fonts;
+        std::map<std::string, std::unique_ptr<SvgImage>> m_images;
+        NSVGrasterizer*                m_rast = nsvgCreateRasterizer();
         HDC                            m_hdc;
         std::set<std::string>          m_faces;
         std::vector<litehtml::position> m_clips;
@@ -642,7 +830,7 @@ namespace
         float  seconds = (float)atof(value.c_str());
         size_t urlPos  = Lower(value).find("url=");
         g_refreshUrl   = urlPos == std::string::npos ? g_url : ResolveUrl(g_baseUrl, Trim(value.substr(urlPos + 4)));
-        UINT ms        = seconds < 0.2f ? 200 : (UINT)(seconds * 1000.0f);
+        UINT ms        = seconds < 0.02f ? 20 : (UINT)(seconds * 1000.0f);
         SetTimer(g_hwnd, kRefreshTimer, ms, nullptr);
     }
 
@@ -657,13 +845,21 @@ namespace
         }
     }
 
+    void RenderFrame();
+
     void Navigate(const std::string& url, bool keepScroll)
     {
+        double start = NowMs();
+        g_msCycle    = g_lastNavigate ? start - (double)g_lastNavigate : 0;
+        g_lastNavigate = (LONGLONG)start;
+
         HCURSOR      oldCursor = SetCursor(LoadCursor(nullptr, IDC_WAIT));
         HttpResponse resp;
         std::string  error;
         bool         ok = HttpGet(url, resp, error);
         SetCursor(oldCursor);
+        g_msFetch  = NowMs() - start;
+        g_pageHttp = g_lastHttp;
 
         g_url     = ok ? resp.finalUrl : url;
         g_baseUrl = g_url;
@@ -674,8 +870,13 @@ namespace
         if (ok && resp.status != 200)
             html = ErrorPage(url, "HTTP " + std::to_string(resp.status));
 
+        double layoutStart = NowMs();
+        g_msImages         = 0;
+        g_container->ClearImages();
         g_doc = litehtml::document::createFromString(html, g_container);
+        g_msParse = NowMs() - layoutStart - g_msImages;
         Layout();
+        g_msLayout = NowMs() - layoutStart - g_msImages - g_msParse;
 
         std::string refresh;
         if (ok && resp.status == 200)
@@ -688,8 +889,10 @@ namespace
         {
             refresh = "5;url=" + url;
         }
+        // Draw now, so the refresh interval starts after the frame is on screen.
+        RenderFrame();
         ScheduleRefresh(refresh);
-        InvalidateRect(g_hwnd, nullptr, FALSE);
+        UpdateTitle();
     }
 
     // Keyboard access to links: a key activates the link with the matching accesskey attribute.
@@ -698,7 +901,7 @@ namespace
         if (!g_doc || ch < 32 || ch > 126)
             return false;
         char        key      = (char)(ch >= 'A' && ch <= 'Z' ? ch - 'A' + 'a' : ch);
-        std::string selector = std::string("a[accesskey=") + key + "]";
+        std::string selector = std::string("a[accesskey=\"") + key + "\"]";
         auto        el       = g_doc->root()->select_one(selector);
         if (!el)
             return false;
@@ -707,27 +910,153 @@ namespace
         return true;
     }
 
-    void Paint(HDC hdc)
+    // ---------------------------------------------------------------- frame buffers
+    //
+    // Two 32-bit DIBs: "front" holds what is on screen, "back" gets the next frame.
+    // After drawing, only the rows/columns that differ are copied to the window. Writes to
+    // the graphics memory are the slow part in the VM, and live values change only a few pixels.
+
+    struct Frame
     {
-        HDC     mem    = CreateCompatibleDC(hdc);
-        HBITMAP bmp    = CreateCompatibleBitmap(hdc, g_clientW, g_clientH);
-        HGDIOBJ oldBmp = SelectObject(mem, bmp);
+        HDC      dc     = nullptr;
+        HBITMAP  bmp    = nullptr;
+        HGDIOBJ  oldBmp = nullptr;
+        DWORD*   bits   = nullptr;
+    };
 
-        RECT   all = {0, 0, g_clientW, g_clientH};
-        HBRUSH bg  = CreateSolidBrush(RGB(255, 255, 255));
-        FillRect(mem, &all, bg);
+    Frame g_front, g_back;
+    int   g_frameW = 0, g_frameH = 0;
+    bool  g_frontValid = false;
+
+    void FreeFrame(Frame& f)
+    {
+        if (f.dc)
+        {
+            SelectObject(f.dc, f.oldBmp);
+            DeleteDC(f.dc);
+            DeleteObject(f.bmp);
+        }
+        f = Frame();
+    }
+
+    bool MakeFrame(Frame& f, int w, int h)
+    {
+        BITMAPINFO bi              = {};
+        bi.bmiHeader.biSize        = sizeof(bi.bmiHeader);
+        bi.bmiHeader.biWidth       = w;
+        bi.bmiHeader.biHeight      = -h;
+        bi.bmiHeader.biPlanes      = 1;
+        bi.bmiHeader.biBitCount    = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        void* bits = nullptr;
+        f.bmp      = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!f.bmp)
+            return false;
+        f.dc     = CreateCompatibleDC(nullptr);
+        f.oldBmp = SelectObject(f.dc, f.bmp);
+        f.bits   = (DWORD*)bits;
+        return true;
+    }
+
+    void EnsureFrames()
+    {
+        if (g_frameW == g_clientW && g_frameH == g_clientH && g_front.dc)
+            return;
+        FreeFrame(g_front);
+        FreeFrame(g_back);
+        g_frameW = g_clientW;
+        g_frameH = g_clientH;
+        g_frontValid = false;
+        if (g_frameW > 0 && g_frameH > 0)
+        {
+            MakeFrame(g_front, g_frameW, g_frameH);
+            MakeFrame(g_back, g_frameW, g_frameH);
+        }
+    }
+
+    // Draws the document into the back buffer, copies the changed parts to the window, swaps buffers.
+    void RenderFrame()
+    {
+        EnsureFrames();
+        if (!g_back.dc)
+            return;
+
+        double start = NowMs();
+        RECT   all   = {0, 0, g_frameW, g_frameH};
+        HBRUSH bg    = CreateSolidBrush(RGB(255, 255, 255));
+        FillRect(g_back.dc, &all, bg);
         DeleteObject(bg);
-
         if (g_doc)
         {
-            litehtml::position clip(0, 0, g_clientW, g_clientH);
-            g_doc->draw((litehtml::uint_ptr)mem, 0, -g_scrollY, &clip);
+            litehtml::position clip(0, 0, g_frameW, g_frameH);
+            g_doc->draw((litehtml::uint_ptr)g_back.dc, 0, -g_scrollY, &clip);
         }
+        GdiFlush();
+        g_msDraw = NowMs() - start;
 
-        BitBlt(hdc, 0, 0, g_clientW, g_clientH, mem, 0, 0, SRCCOPY);
-        SelectObject(mem, oldBmp);
-        DeleteObject(bmp);
-        DeleteDC(mem);
+        start      = NowMs();
+        long   pixels = 0;
+        HDC    hdc    = GetDC(g_hwnd);
+        if (!g_frontValid)
+        {
+            BitBlt(hdc, 0, 0, g_frameW, g_frameH, g_back.dc, 0, 0, SRCCOPY);
+            pixels = (long)g_frameW * g_frameH;
+        }
+        else
+        {
+            // Collect runs of changed rows into one rectangle each (union of their column ranges).
+            int y = 0;
+            while (y < g_frameH)
+            {
+                int top = -1, left = g_frameW, right = -1;
+                for (; y < g_frameH; ++y)
+                {
+                    const DWORD* a = g_back.bits + (size_t)y * g_frameW;
+                    const DWORD* b = g_front.bits + (size_t)y * g_frameW;
+                    int          l = 0, r = g_frameW - 1;
+                    while (l <= r && a[l] == b[l])
+                        ++l;
+                    if (l > r)
+                    {
+                        if (top >= 0)
+                            break; // end of this run
+                        continue;
+                    }
+                    while (a[r] == b[r])
+                        --r;
+                    if (top < 0)
+                        top = y;
+                    if (l < left)
+                        left = l;
+                    if (r > right)
+                        right = r;
+                }
+                if (top >= 0)
+                {
+                    int w = right - left + 1, h = y - top;
+                    BitBlt(hdc, left, top, w, h, g_back.dc, left, top, SRCCOPY);
+                    pixels += (long)w * h;
+                }
+            }
+        }
+        ReleaseDC(g_hwnd, hdc);
+        g_msBlit  = NowMs() - start;
+        g_blitKpx = (int)(pixels / 1000);
+
+        Frame t     = g_front;
+        g_front     = g_back;
+        g_back      = t;
+        g_frontValid = true;
+    }
+
+    // Window exposed by another window: copy from the front buffer, no redraw needed.
+    void PaintFromFront(HDC hdc, const RECT& rc)
+    {
+        if (g_frontValid)
+            BitBlt(hdc, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, g_front.dc, rc.left, rc.top,
+                   SRCCOPY);
+        else
+            RenderFrame();
     }
 
     void ScrollBy(int dy)
@@ -740,12 +1069,13 @@ namespace
             g_scrollY = maxScroll;
         if (g_scrollY < 0)
             g_scrollY = 0;
-        InvalidateRect(g_hwnd, nullptr, FALSE);
+        RenderFrame();
     }
 
     LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
-        auto redrawAll = [](const litehtml::position&) { InvalidateRect(g_hwnd, nullptr, FALSE); };
+        // Hover/click changes from litehtml: redraw after the callback returns.
+        auto redrawAll = [](const litehtml::position&) { PostMessageW(g_hwnd, WM_APP_REDRAW, 0, 0); };
 
         switch (msg)
         {
@@ -753,7 +1083,8 @@ namespace
             g_clientW = LOWORD(lParam);
             g_clientH = HIWORD(lParam);
             Layout();
-            InvalidateRect(hwnd, nullptr, FALSE);
+            if (g_clientW > 0 && g_clientH > 0)
+                RenderFrame();
             return 0;
 
         case WM_ERASEBKGND:
@@ -763,8 +1094,18 @@ namespace
         {
             PAINTSTRUCT ps;
             HDC         hdc = BeginPaint(hwnd, &ps);
-            Paint(hdc);
+            PaintFromFront(hdc, ps.rcPaint);
             EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        case WM_APP_REDRAW:
+        {
+            MSG dup; // several hover changes in a row need only one redraw
+            while (PeekMessageW(&dup, hwnd, WM_APP_REDRAW, WM_APP_REDRAW, PM_REMOVE))
+            {
+            }
+            RenderFrame();
             return 0;
         }
 
@@ -851,6 +1192,8 @@ namespace
         case WM_DESTROY:
             KillTimer(hwnd, kRefreshTimer);
             g_doc.reset();
+            FreeFrame(g_front);
+            FreeFrame(g_back);
             PostQuitMessage(0);
             return 0;
         }
@@ -871,6 +1214,43 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR cmdLine, int nCmdShow)
     if (startUrl.empty())
         startUrl = kDefaultUrl;
 
+    // "-bench <file>": parse a local HTML file 20 times and report the average (for profiling).
+    if (startUrl.compare(0, 7, "-bench ") == 0)
+    {
+        std::string file = Trim(startUrl.substr(7));
+        HANDLE      h    = CreateFileA(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+        std::string html;
+        if (h != INVALID_HANDLE_VALUE)
+        {
+            char  buf[4096];
+            DWORD n;
+            while (ReadFile(h, buf, sizeof(buf), &n, nullptr) && n)
+                html.append(buf, n);
+            CloseHandle(h);
+        }
+        GdiContainer bench;
+        g_container = &bench;
+        g_clientW   = 620;
+        g_clientH   = 470;
+        double t0   = NowMs();
+        for (int i = 0; i < 20; ++i)
+            litehtml::document::createFromString(html, &bench);
+        double t1 = NowMs();
+        auto   doc = litehtml::document::createFromString(html, &bench);
+        double t2  = NowMs();
+        for (int i = 0; i < 20; ++i)
+            doc->render(620);
+        double t3 = NowMs();
+        char   msg[200];
+        snprintf(msg, sizeof(msg), "%s\nparse %.2f ms, render %.2f ms (avg of 20), %d bytes", file.c_str(),
+                 (t1 - t0) / 20, (t3 - t2) / 20, (int)html.size());
+        HANDLE out = CreateFileA((file + ".txt").c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+        DWORD  written;
+        WriteFile(out, msg, (DWORD)strlen(msg), &written, nullptr);
+        CloseHandle(out);
+        return 0;
+    }
+
     WNDCLASSW wc     = {};
     wc.lpfnWndProc   = WndProc;
     wc.hInstance     = hInstance;
@@ -879,9 +1259,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR cmdLine, int nCmdShow)
     wc.lpszClassName = kClassName;
     RegisterClassW(&wc);
 
-    RECT rc = {0, 0, 640, 440};
+    RECT rc = {0, 0, 620, 470};
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-    g_hwnd = CreateWindowW(kClassName, L"Stykker Lite", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+    g_hwnd = CreateWindowW(kClassName, L"Stykker Lite", WS_OVERLAPPEDWINDOW, 0, 0,
                            rc.right - rc.left, rc.bottom - rc.top, nullptr, nullptr, hInstance, nullptr);
 
     GdiContainer container;

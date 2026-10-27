@@ -608,6 +608,149 @@ namespace
         return neg ? -v : v;
     }
 
+    // Integer parsing as strtoull does it: whitespace, sign, 0x prefix for base 16 or 0.
+    unsigned long long ParseUnsigned(const char* s, char** end, int base, bool& neg, bool& any)
+    {
+        const char* p = s;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\f' || *p == '\v')
+            ++p;
+        neg = false;
+        if (*p == '+' || *p == '-')
+            neg = *p++ == '-';
+        if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X'))
+        {
+            p += 2;
+            base = 16;
+        }
+        else if (base == 0)
+            base = p[0] == '0' ? 8 : 10;
+
+        unsigned long long v = 0;
+        any = false;
+        for (;; ++p)
+        {
+            int d;
+            if (*p >= '0' && *p <= '9') d = *p - '0';
+            else if (*p >= 'a' && *p <= 'z') d = *p - 'a' + 10;
+            else if (*p >= 'A' && *p <= 'Z') d = *p - 'A' + 10;
+            else break;
+            if (d >= base)
+                break;
+            v   = v * base + d;
+            any = true;
+        }
+        if (end)
+            *end = (char*)(any ? p : s);
+        return v;
+    }
+
+    long long ParseSigned(const char* s, char** end, int base)
+    {
+        bool               neg, any;
+        unsigned long long v = ParseUnsigned(s, end, base, neg, any);
+        return neg ? -(long long)v : (long long)v;
+    }
+
+    // Minimal sscanf: literals, whitespace, %d %i %u %x %X %o %c %s %n with width, and %*.
+    // Enough for the hex/rgb() color parsing in nanosvg. No floating point.
+    int ScanString(const char* in, const char* fmt, va_list ap)
+    {
+        int         assigned = 0;
+        const char* p        = in;
+        while (*fmt)
+        {
+            if (*fmt == ' ' || *fmt == '\t' || *fmt == '\n')
+            {
+                while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+                    ++p;
+                ++fmt;
+                continue;
+            }
+            if (*fmt != '%' || fmt[1] == '%')
+            {
+                if (*fmt == '%')
+                    ++fmt;
+                if (*p != *fmt)
+                    break;
+                ++p;
+                ++fmt;
+                continue;
+            }
+            ++fmt;
+            bool skip = *fmt == '*';
+            if (skip)
+                ++fmt;
+            int width = 0;
+            while (*fmt >= '0' && *fmt <= '9')
+                width = width * 10 + (*fmt++ - '0');
+            int len = 0;
+            while (*fmt == 'h' || *fmt == 'l' || *fmt == 'z' || *fmt == 'j' || *fmt == 'L')
+                len += *fmt++ == 'l' ? 1 : 0;
+            char conv = *fmt++;
+            if (!conv)
+                break;
+
+            if (conv == 'n')
+            {
+                if (!skip)
+                    *va_arg(ap, int*) = (int)(p - in);
+                continue;
+            }
+            if (conv != 'c')
+                while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+                    ++p;
+            if (!*p)
+                return assigned ? assigned : -1;
+
+            if (conv == 'c' || conv == 's')
+            {
+                int   n   = width ? width : (conv == 'c' ? 1 : 0x7fffffff);
+                char* out = skip ? nullptr : va_arg(ap, char*);
+                int   i   = 0;
+                while (i < n && p[i] && (conv == 'c' || (p[i] != ' ' && p[i] != '\t' && p[i] != '\n')))
+                {
+                    if (out)
+                        out[i] = p[i];
+                    ++i;
+                }
+                if (out && conv == 's')
+                    out[i] = 0;
+                p += i;
+                if (!skip)
+                    ++assigned;
+                continue;
+            }
+
+            int base = conv == 'x' || conv == 'X' ? 16 : conv == 'o' ? 8 : conv == 'i' ? 0 : 10;
+            if (conv != 'd' && conv != 'i' && conv != 'u' && base == 10)
+                break;
+            char        buf[64];
+            int         n = width && width < 63 ? width : 63;
+            int         i = 0;
+            for (; i < n && p[i]; ++i)
+                buf[i] = p[i];
+            buf[i] = 0;
+            char*              stop;
+            bool               neg, any;
+            unsigned long long v = ParseUnsigned(buf, &stop, base, neg, any);
+            if (!any)
+                break;
+            p += stop - buf;
+            if (!skip)
+            {
+                long long sv = neg ? -(long long)v : (long long)v;
+                if (len >= 2)
+                    *va_arg(ap, long long*) = sv;
+                else if (len == 1)
+                    *va_arg(ap, long*) = (long)sv;
+                else
+                    *va_arg(ap, int*) = (int)sv;
+                ++assigned;
+            }
+        }
+        return assigned;
+    }
+
     double FloorD(double x)
     {
         if (x != x || x >= 4503599627370496.0 || x <= -4503599627370496.0)
@@ -830,6 +973,19 @@ extern "C"
     double __cdecl atof(const char* s)
     {
         return ParseDouble<char>(s, nullptr);
+    }
+
+    // UCRT strtoll (64-bit parse_integer) uses SSE. Its object also holds strtol, atoi etc., so it
+    // cannot be replaced by name; callers that need it are redirected here (see main.cpp, nanosvg).
+    long long __cdecl nt4_strtoll(const char* s, char** end, int base)
+    {
+        return ParseSigned(s, end, base);
+    }
+
+    int __cdecl __stdio_common_vsscanf(unsigned __int64, const char* buffer, size_t, const char* format, _locale_t,
+                                       va_list args)
+    {
+        return ScanString(buffer, format, args);
     }
 
     // ------------------------------------------------------------ rounding

@@ -49,14 +49,15 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(LibCxxRoot)\src\winpthreads\include;$(LibCxxRoot)\include;$(LiteHtmlRoot)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(LibCxxRoot)\src\winpthreads\include;$(LibCxxRoot)\include;$(LiteHtmlRoot)\include;$(MSBuildProjectDirectory)\..\nanosvg\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-march=pentium-mmx %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>      <AdditionalDependencies>EnlyzeWinCompatLib.lib;winpthreads.lib;libc++.lib;libcpmt.lib;litehtml.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>EnlyzeWinCompatLib.lib;winpthreads.lib;libc++.lib;libcpmt.lib;litehtml.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(LibBuildRoot)\Release\EnlyzeWinCompatLib\bin;$(LibBuildRoot)\Release\winpthreads\bin;$(LibBuildRoot)\Release\libc++\bin;$(LibBuildRoot)\Release\litehtml\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <MinimumRequiredVersion>4.0</MinimumRequiredVersion>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
