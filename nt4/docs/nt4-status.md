@@ -1,4 +1,4 @@
-# NT4 SP6 VM – Dokumentation (korrigiert, Stand 2026-10-25, Netzwerk läuft)
+# NT4 SP6 VM – Dokumentation (korrigiert, Stand 2026-10-27, Netzwerk, 16 Bit, Opera)
 
 Dieser Stand ersetzt die Fassung von 2026-10-24. Die Punkte wurden am 25.10. im Live-Test geprüft.
 
@@ -234,3 +234,29 @@ Weg: Ordner auf dem Host → ISO bauen → ISO als DVD in die laufende VM einhä
   - „List All Modes“ meldet 640 × 480, 800 × 600, 1024 × 768 und 1152 × 864, jeweils mit 256 Farben. Die letzten Zeilen habe ich nicht vollständig gelesen.
   - Beim Start weiterhin SCM-Meldung „service or driver failed“ und Dr.-Watson-Fehler (VMware-Reste).
   - Gesetzt: 800 × 600 bei 256 Farben. Zuerst über „Test“ bestätigt („Did you see the test bitmap properly?“ mit Yes), danach mit OK gespeichert. Danach meldet VBox den Modus `800,600,8`. Ein Neustart mit dieser Einstellung ist noch nicht geprüft.
+- **16 Bit (27.10.):** „List All Modes“ zeigt bei VBEMP auch 65536 Farben (640 × 480 bis 1152 × 864). Gesetzt: 800 × 600 bei 65536 Farben. Der Test zeigt saubere Verläufe ohne Muster. Mit Yes bestätigt, mit OK gespeichert. Ein Neustart ist nicht nötig. VBox meldet `800,600,16`.
+
+---
+
+## 11. Browser und Blazor (27.10.)
+
+**Browser:** Auf dem NT4 ist bereits Opera 10.63 installiert (Build 3516, Presto 2.6.30, `C:\Program Files\Opera\opera.exe`). Er ist jetzt Standardbrowser. Daneben gibt es nur den IE aus `Plus!\Microsoft Internet` (sehr alt). Opera 10.63 ist ungefähr das Neueste, was auf NT4 läuft: JavaScript ES3/ES5 teilweise, XMLHttpRequest, CSS 2.1. Es gibt kein WebSocket, kein Promise, keine Arrow-Functions und kein aktuelles TLS.
+
+**Netzwerk zum Host:** crimsrv ist der Host der VM.
+- `10.0.2.2` (NAT-Gateway) antwortet auf Ping, HTTP darauf geht aber nicht. Seit VirtualBox 7 ist der Loopback des Hosts für NAT-Gäste gesperrt (`localhostreachable` ist aus). Ein Server auf `127.0.0.1` ist deshalb aus der VM nicht erreichbar.
+- Was geht: Der Server lauscht auf der LAN-IP von crimsrv, `192.168.178.146`. Opera öffnet `http://192.168.178.146:5080/`. Die Windows-Firewall musste dafür nicht geändert werden.
+- Nur HTTP, kein HTTPS. Opera 10.63 spricht kein aktuelles TLS.
+- In Opera hat F8 (Adresszeile) nach einer Fehlerseite nicht mehr reagiert. Sicherer Weg: Run-Dialog mit `c:\progra~1\opera\opera.exe <URL>`.
+
+**Testapp:** `S:\workspace\nt4\src\nt4-blazor` (.NET 10, `dotnet new blazor --interactivity Server --empty`). Start:
+`dotnet run -c Release --no-launch-profile --urls http://192.168.178.146:5080`
+
+| Test | Ergebnis in Opera 10.63 |
+|---|---|
+| Seite rendern (Static SSR, Stykker-Farben, CSS 2.1) | geht |
+| Formular-POST ohne JS (`@formname`, `AntiforgeryToken`) | geht, Zähler zählt hoch |
+| Eigenes JS (ES3): Uhr mit `setInterval` | geht |
+| Eigenes JS: `XMLHttpRequest` auf `/api/zeit` | geht |
+| Interaktives Blazor (`@rendermode InteractiveServer`, SignalR) | geht nicht. `blazor.web.js` braucht modernes JS. Status bleibt „nicht verbunden“, der Reconnect-Dialog erscheint als Text auf der Seite (kein `<dialog>`) |
+
+**Folgerung:** Blazor für NT4 so bauen: Seiten als Static SSR rendern, Eingaben über Formular-POST, kleine Interaktion mit eigenem ES3-JS und XHR auf Minimal-API-Endpunkte. `blazor.web.js` und `ReconnectModal` sollten auf diesen Seiten wegbleiben. Interaktives Blazor Server ginge höchstens mit einem nach ES5 übersetzten Client samt Polyfills und Long Polling. Das ist ungetestet und aufwendig.

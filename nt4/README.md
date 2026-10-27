@@ -10,6 +10,7 @@ Notes and sources from bringing up a Windows NT 4.0 SP6 test machine in VirtualB
 | `tools/make-iso.ps1` | Builds an ISO from a folder (IMAPI2FS). The ISO is mounted as a DVD in the running VM, which is how files get in. |
 | `window/main.cpp`, `window/nt4-window.vcxproj` | Win32/GDI window app with the Stykker design tokens. Built with clang-cl against ENLYZE. |
 | `build-notes/*.patch` | Local changes to third-party sources, as patches. The sources themselves are not in this repo. |
+| `blazor/` | .NET 10 Blazor test app that runs on the host and is opened from NT 4 in Opera 10.63. Shows what works there: static SSR, form posts, ES3 JavaScript with XHR. Interactive Blazor Server does not. |
 
 ## Build
 
@@ -26,6 +27,14 @@ Notes and sources from bringing up a Windows NT 4.0 SP6 test machine in VirtualB
 - Screen: 16 colors at 640x480 (standard VGA) before VBEMP. The Stykker gradients dither in that mode.
 - Tried: the Cirrus Logic 544x and the generic S3 driver from the NT 4 CD. Both install and NT 4 boots, but List All Modes shows only 640x480 and 800x600 at 16 colors.
 - VBE driver VBEMP (third party, archive copy of vbempg.zip, STABLE 2007): installed. The screen switches to 256 colors at 640x480. 800x600 at 256 colors is set and was confirmed with the test dialog. A reboot with this setting is not checked yet.
+
+## Status (27.10.)
+
+- Screen: VBEMP also offers 65536 colors (16 bit). Set to 800x600 at 65536 colors, confirmed with the test dialog, no reboot needed.
+- Browser: Opera 10.63 (Presto 2.6.30) is already installed and is now the default browser. HTTP only, no current TLS.
+- Host access: the VirtualBox 7 NAT does not forward `10.0.2.2` to the host's loopback. The app listens on the host's LAN IP instead, and NT 4 opens `http://<host LAN IP>:5080/`.
+- Blazor in Opera 10.63: static SSR pages, form posts, own ES3 JavaScript and XHR work. Interactive Blazor Server (SignalR, `blazor.web.js`) does not connect.
+- Run the app: `dotnet run -c Release --no-launch-profile --urls http://<host LAN IP>:5080` in `blazor/`.
 
 ## Not included
 

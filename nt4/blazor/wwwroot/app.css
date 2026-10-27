@@ -1,0 +1,54 @@
+/* Stykker tokens (dark), kept to CSS 2.1 for Opera 10 / Presto */
+body {
+    background: #060916;
+    color: #e8eeff;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    margin: 0;
+    padding: 16px;
+}
+
+.card {
+    background: #111a33;
+    border: 1px solid #23305a;
+    padding: 12px 16px;
+    margin: 0 0 12px 0;
+}
+
+.eyebrow {
+    color: #4fe3ff;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 3px;
+    margin: 0;
+}
+
+h1 {
+    font-size: 26px;
+    margin: 4px 0;
+}
+
+h2 {
+    font-size: 16px;
+    margin: 0 0 8px 0;
+    color: #4fe3ff;
+}
+
+.muted {
+    color: #8292b8;
+    font-size: 12px;
+    margin: 0;
+}
+
+button {
+    background: #4fe3ff;
+    color: #060916;
+    border: 1px solid #4fe3ff;
+    padding: 6px 14px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+#blazor-error-ui {
+    display: none;
+}

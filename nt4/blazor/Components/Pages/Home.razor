@@ -1,0 +1,66 @@
+﻿@page "/"
+
+<PageTitle>Stykker NT4</PageTitle>
+
+<div class="card">
+    <p class="eyebrow">STYKKER</p>
+    <h1>Blazor auf NT 4</h1>
+    <p class="muted">Server: @Environment.MachineName | .NET @Environment.Version | gerendert @DateTime.Now.ToString("HH:mm:ss")</p>
+</div>
+
+<div class="card">
+    <h2>1. Formular ohne JavaScript (Static SSR)</h2>
+    <form method="post" @formname="zaehler">
+        <AntiforgeryToken />
+        <input type="hidden" name="Zaehler" value="@Zaehler" />
+        <p>Zähler: <strong>@Zaehler</strong></p>
+        <button type="submit">+1 (Post an den Server)</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>2. JavaScript im Browser (ES3)</h2>
+    <p>Uhr im Browser: <strong id="uhr">kein JavaScript</strong></p>
+    <p>Serverzeit per XMLHttpRequest: <strong id="xhr">-</strong></p>
+    <button type="button" onclick="holeZeit()">Serverzeit holen</button>
+</div>
+
+<div class="card">
+    <h2>3. Interaktiv (Blazor Server, SignalR)</h2>
+    <InteractiveZaehler @rendermode="InteractiveServer" />
+</div>
+
+<script type="text/javascript">
+    function zweistellig(n) { return (n < 10 ? "0" : "") + n; }
+    function tick() {
+        var d = new Date();
+        document.getElementById("uhr").innerHTML =
+            zweistellig(d.getHours()) + ":" + zweistellig(d.getMinutes()) + ":" + zweistellig(d.getSeconds());
+    }
+    function holeZeit() {
+        var x = new XMLHttpRequest();
+        x.open("GET", "api/zeit?r=" + new Date().getTime(), true);
+        x.onreadystatechange = function () {
+            if (x.readyState == 4) {
+                document.getElementById("xhr").innerHTML = x.status == 200 ? x.responseText : "Fehler " + x.status;
+            }
+        };
+        x.send(null);
+    }
+    tick();
+    setInterval(tick, 1000);
+</script>
+
+@code {
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    [SupplyParameterFromForm]
+    public int Zaehler { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (HttpMethods.IsPost(HttpContext?.Request.Method ?? ""))
+            Zaehler++;
+    }
+}

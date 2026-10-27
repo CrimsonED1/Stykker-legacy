@@ -1,0 +1,7 @@
+<p>Status: <strong>@(RendererInfo.IsInteractive ? "verbunden (interaktiv)" : "nicht verbunden (nur statisch)")</strong></p>
+<p>Zähler: <strong>@zaehler</strong></p>
+<button type="button" @onclick="() => zaehler++">+1 (über SignalR)</button>
+
+@code {
+    private int zaehler;
+}
