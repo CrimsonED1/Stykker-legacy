@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{8a41c3d2-6f0e-4b7a-a915-3c2e7d1f0b42}</ProjectGuid>
+    <RootNamespace>litehtmlnt4</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <VCToolsVersion>14.38.33130</VCToolsVersion>
+    <LiteHtmlRoot>$(MSBuildProjectDirectory)\..\litehtml</LiteHtmlRoot>
+    <LibCxxRoot>$(MSBuildProjectDirectory)\..\nt4-exe-test\EnlyzeWinCompatLib\src\libcxx</LibCxxRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ClCompile Include="$(LiteHtmlRoot)\src\*.cpp" />
+    <ClCompile Include="$(LiteHtmlRoot)\src\gumbo\src\*.c" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>ClangCL</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(MSBuildProjectDirectory)\..\build\Release\litehtml\bin\</OutDir>
+    <IntDir>$(MSBuildProjectDirectory)\..\build\Release\litehtml\obj\</IntDir>
+    <TargetName>litehtml</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalIncludeDirectories>$(LibCxxRoot)\src\winpthreads\include;$(LibCxxRoot)\include;$(LiteHtmlRoot)\include;$(LiteHtmlRoot)\include\litehtml;$(LiteHtmlRoot)\src\gumbo\src;$(LiteHtmlRoot)\src\gumbo\visualc\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>-march=pentium-mmx -Wno-everything %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

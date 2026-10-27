@@ -1,4 +1,4 @@
-# NT4 SP6 VM – Dokumentation (korrigiert, Stand 2026-10-27, Netzwerk, 16 Bit, Opera)
+# NT4 SP6 VM – Dokumentation (korrigiert, Stand 2026-10-27, Netzwerk, 16 Bit, Opera, litehtml)
 
 Dieser Stand ersetzt die Fassung von 2026-10-24. Die Punkte wurden am 25.10. im Live-Test geprüft.
 
@@ -260,3 +260,35 @@ Weg: Ordner auf dem Host → ISO bauen → ISO als DVD in die laufende VM einhä
 | Interaktives Blazor (`@rendermode InteractiveServer`, SignalR) | geht nicht. `blazor.web.js` braucht modernes JS. Status bleibt „nicht verbunden“, der Reconnect-Dialog erscheint als Text auf der Seite (kein `<dialog>`) |
 
 **Folgerung:** Blazor für NT4 so bauen: Seiten als Static SSR rendern, Eingaben über Formular-POST, kleine Interaktion mit eigenem ES3-JS und XHR auf Minimal-API-Endpunkte. `blazor.web.js` und `ReconnectModal` sollten auf diesen Seiten wegbleiben. Interaktives Blazor Server ginge höchstens mit einem nach ES5 übersetzten Client samt Polyfills und Long Polling. Das ist ungetestet und aufwendig.
+
+---
+
+## 12. litehtml als eingebauter Browser (27.10.)
+
+**Ziel:** HTML vom Blazor-Server in einer eigenen C++-App auf NT4 anzeigen, ohne JavaScript und ohne WebAssembly. Der Server steuert Fortschrittsbalken und Timer.
+
+**Bausteine:**
+- litehtml (BSD-Lizenz, `github.com/litehtml/litehtml`, Commit `7ea2956`, geklont nach `S:\workspace\nt4\src\litehtml`). Das ist ein HTML/CSS-Renderer in C++17 mit eigenem HTML-Parser (gumbo). Er hat kein JavaScript.
+- `S:\workspace\nt4\src\nt4-lite\litehtml-nt4.vcxproj` baut litehtml als statische Bibliothek mit der NT4-Toolchain (ClangCL, MSVC 14.38, libc++ aus EnlyzeWinCompatLib, `-march=pentium-mmx`). Ausgabe: `build\Release\litehtml\bin\litehtml.lib`. Der Build lief ohne Änderungen am litehtml-Code durch.
+- `S:\workspace\nt4\src\nt4-lite\main.cpp`: Fenster-App `NT4LITE.EXE`. Sie enthält eine eigene GDI-Zeichenschicht für litehtml (Schrift, Text, Flächen, Rahmen, einfache lineare Verläufe in 2-px-Streifen; ohne Bilder und ohne runde Ecken). HTTP/1.0 läuft über Winsock (`ws2_32`), mit Weiterleitungen und nur `http://`.
+- Bedienung: Links per Maus. Per Tastatur löst ein Buchstabe den Link mit passendem `accesskey` aus. F5 lädt neu, Pfeiltasten und Bild auf/ab scrollen, Esc beendet. Start-URL ist `http://192.168.178.146:5080/lite` oder das erste Kommandozeilenargument.
+- Aktualisierung: Die App wertet `<meta http-equiv="refresh" content="N;url=...">` und den HTTP-Header `Refresh` aus. Damit bestimmt der Server, wie oft der Client nachfragt.
+
+**Serverseite (Blazor-App `nt4-blazor`):**
+- `LiteTimer` (Singleton, 20 s): Start, Pause, Reset, Prozent.
+- `GET /lite` rendert die Komponente `Components/Lite/LitePage.razor` als ganze Seite (`RazorComponentResult`, Static SSR, ohne `blazor.web.js`). `GET /lite?cmd=start|stop|reset` führt den Befehl aus und leitet auf `/lite` zurück.
+- Die Seite setzt den Refresh: jede Sekunde, solange der Timer läuft, sonst alle 3 s.
+
+**Problem: SSE in der UCRT.** Der erste Start brach mit „illegal instruction“ in `__acrt_fenv_get_control` ab. Die statische UCRT aus Windows SDK 10.0.26100 ist für SSE2 gebaut. printf mit Kommazahlen, strtod/atof, Runden (roundf, nearbyint, floor/ceil), `pow` und die fenv-Funktionen nutzen SSE ohne CPU-Prüfung. NT4 schaltet SSE nie frei (CR4.OSFXSR), deshalb ist jeder SSE-Befehl dort ungültig. litehtml braucht diese Funktionen (CSS-Zahlen, `std::to_string(float)` für Schrift-Schlüssel).
+- Lösung: `S:\workspace\nt4\src\nt4-lite\nt4_crt.cpp` ersetzt diese Einstiegspunkte durch eigene x87-Versionen: `__stdio_common_vsprintf` (+ `_s`, `vsnprintf_s`, `vswprintf`, `vfprintf`, `vfwprintf`), `strtod`/`strtof`/`atof`/`wcstod` und Verwandte, `floor`, `ceil`, `round`, `roundf`, `trunc`, `rint`, `nearbyint`, `lround`, `lrint`, `pow`, `fegetround`, `fesetround`. Die Datei wird mit `-fno-builtin` gebaut. Der Linker nimmt diese Definitionen vor den UCRT-Objekten, Konflikte gab es keine.
+- Prüfung nach dem Build: Disassemblieren mit `llvm-objdump` und Zuordnen der Funktionen mit `llvm-symbolizer` (beide in VS Build Tools `VC\Tools\Llvm\bin`). Übrig bleiben SSE-Befehle in `memmove`, `memset`, `wcslen`, `strnlen` und `tan`. Diese wählen ihren SSE-Pfad nur nach einer CPU-Prüfung. Dazu kommen Fehlerpfade der x87-Mathematik (`_handle_exc`, `_87except`, `_decomp`), die nur bei Mathefehlern laufen.
+- Das gilt auch für die bisherige Fenster-App: Sobald dort printf mit `%f`, `atof` oder Rundungsfunktionen genutzt werden, braucht sie `nt4_crt.cpp` ebenfalls (siehe den offenen Punkt „Mathe (log10)“).
+
+**Ergebnis im NT4 (16 Bit, 800 × 600):**
+- `NT4LITE.EXE` lädt `/lite` von crimsrv und rendert die Seite im Stykker-Look: Karten, Rahmen, Farbverlauf im Balken, Buttons.
+- Taste S startet den Timer auf dem Server. Der Balken wächst jede Sekunde (7 s → 36 %, 13 s → 65 %).
+- Pause vom Host aus (`/lite?cmd=stop` per PowerShell): Die NT4-App zeigt danach „angehalten“ bei 25 % und fragt nur noch alle 3 s nach. Der Server steuert also Zustand und Takt.
+- Übertragung: ISO `S:\workspace\nt4\apps9.iso` (Volume LITE2), in der VM als `C:\NT4LITE2.EXE`. `copy /y` gibt es in NT4 nicht. Die erste Version liegt noch als `C:\NT4LITE.EXE` (stürzt ab, SSE).
+- Größe: `NT4LITE.EXE` etwa 1,6 MB (statisch gelinkt, litehtml + libc++).
+
+**Grenzen:** Kein JavaScript, keine Bilder, keine Formulare (litehtml zeichnet Eingabefelder nicht selbst). Jede Aktualisierung lädt die ganze Seite neu und rendert sie komplett. Bei dieser Seitengröße ist das unauffällig.

@@ -1,0 +1,50 @@
+@* Page for the NT 4 litehtml client: static HTML + CSS, no script. The server sets the refresh rate. *@
+@inject LiteTimer Timer
+
+@{
+    var elapsed = Timer.Elapsed;
+    var running = Timer.Running;
+    var percent = Timer.Percent;
+    var done = percent >= 100;
+    var status = running ? "läuft" : done ? "fertig" : elapsed > TimeSpan.Zero ? "angehalten" : "bereit";
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Server-Timer</title>
+    <meta http-equiv="refresh" content="@(running ? "1" : "3");url=/lite" />
+    <style>
+        body { background: #060916; color: #e8eeff; font-family: Arial, sans-serif; font-size: 14px; margin: 0; padding: 16px; }
+        .card { background: #111a33; border: 1px solid #23305a; padding: 12px 16px; margin-bottom: 12px; }
+        .eyebrow { color: #4fe3ff; font-size: 11px; font-weight: bold; letter-spacing: 3px; margin: 0; }
+        h1 { font-size: 24px; margin: 4px 0; }
+        .muted { color: #8292b8; font-size: 12px; margin: 0; }
+        .bar { background: #060916; border: 1px solid #23305a; height: 22px; margin: 10px 0; }
+        .fill { height: 22px; background: linear-gradient(to right, #1f6f8b, #4fe3ff); }
+        .time { font-size: 28px; font-weight: bold; color: #e8eeff; }
+        .row { margin-top: 12px; }
+        a.btn { background: #4fe3ff; color: #060916; padding: 6px 14px; margin-right: 8px; font-weight: bold; text-decoration: none; }
+        a.ghost { background: #23305a; color: #e8eeff; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <p class="eyebrow">STYKKER LITE</p>
+        <h1>Server-Timer</h1>
+        <p class="muted">litehtml auf NT 4, ohne JavaScript. Serverzeit @DateTime.Now.ToString("HH:mm:ss")</p>
+    </div>
+
+    <div class="card">
+        <span class="time">@elapsed.ToString(@"mm\:ss") / @Timer.Duration.ToString(@"mm\:ss")</span>
+        <div class="bar"><div class="fill" style="width: @(percent)%"></div></div>
+        <p>@percent % | Status: <b>@status</b> | Aktualisierung alle @(running ? 1 : 3) s</p>
+        <div class="row">
+            <a class="btn" href="/lite?cmd=start" accesskey="s">Start (S)</a>
+            <a class="btn ghost" href="/lite?cmd=stop" accesskey="p">Pause (P)</a>
+            <a class="btn ghost" href="/lite?cmd=reset" accesskey="r">Reset (R)</a>
+        </div>
+    </div>
+</body>
+</html>
