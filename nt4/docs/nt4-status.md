@@ -1,4 +1,4 @@
-# NT4 SP6 VM – Dokumentation (korrigiert, Stand 2026-10-27, Netzwerk, 16 Bit, Opera, litehtml, SVG)
+# NT4 SP6 VM – Dokumentation (korrigiert, Stand 2026-10-27, Netzwerk, 16 Bit, Opera, litehtml, SVG, Architektur)
 
 Dieser Stand ersetzt die Fassung von 2026-10-24. Die Punkte wurden am 25.10. im Live-Test geprüft.
 
@@ -136,7 +136,9 @@ Alias für die Beispiele: `VBM` = `"C:\Program Files\Oracle\VirtualBox\VBoxManag
 ## 7. Dateien aus diesem Testlauf (`S:\workspace\`)
 - `nt4_*.png` sind Screenshots. Können nach Durchsicht gelöscht werden.
 - Backup-VMDK: siehe Abschnitt 1.
-- `S:\workspace\nt4\apps*.iso` (`apps.iso` … `apps9.iso`): Transfer-ISOs, die Ordner `apps*` sind ihre Quellen. `apps7.iso` = VBEMP-Treiber, `apps8.iso` = erste `NT4LITE.EXE` (mit SSE, stürzt ab), `apps9.iso` = funktionierende `NT4LITE.EXE` (derzeit eingehängt). Die älteren können weg.
+- `S:\workspace\nt4\apps*.iso` (`apps.iso` … `apps11.iso`): Transfer-ISOs, die Ordner `apps*` sind ihre Quellen. `apps7.iso` = VBEMP-Treiber, `apps8.iso` = erste `NT4LITE.EXE` (mit SSE, stürzt ab), `apps9.iso` = `NT4LITE.EXE` mit Timer (Abschnitt 12), `apps10.iso` = `NT4LITE3.EXE` mit SVG und Zeitmessung, `apps11.iso` = `NT4LITE4.EXE` mit Differenz-Blit und Schrift-Cache (Abschnitt 13, derzeit eingehängt). Die älteren können weg.
+- In der VM liegen `C:\NT4LITE.EXE` (stürzt ab, SSE), `C:\NT4LITE2.EXE` (Timer), `C:\NT4LITE3.EXE` (SVG) und `C:\NT4LITE4.EXE` (aktuell). Aufruf mit URL als Argument, z. B. `C:\NT4LITE4.EXE http://192.168.178.146:5080/lite/axes?ms=200`.
+- `S:\workspace\nt4\shots\`: Screenshots aus `vm-keys.ps1` (Abschnitte 12 und 13).
 - `S:\workspace\nt4\src\nt4-blazor`: Blazor-Testapp (Abschnitt 11 und 12). `S:\workspace\nt4\src\nt4-lite`: litehtml-App. `S:\workspace\nt4\src\litehtml`: litehtml-Quelltext (Abschnitt 12).
 - `S:\workspace\nt4\tools\vm-keys.ps1`: schickt Tasten (Scancodes, Text, Wartezeit) an die VM und macht auf Wunsch einen Screenshot nach `S:\workspace\nt4\shots`. Beispiel: `.\vm-keys.ps1 -Steps "k:1d 01 81 9d","w:600","k:13 93","t:cmd","k:1c 9c" -Shot run1` (Ctrl+Esc, R, `cmd`, Enter).
 
@@ -334,3 +336,57 @@ Seite mit SVG-Charts in der VM: Laden 104, Bilder 286, Parsen 131, Zeichnen 303 
 **Offen:**
 - Der Farbverlauf im SVG (Fläche unter der Linie, Balkenverlauf) wird von nanosvg/der Blend-Routine nicht sichtbar dargestellt. Die Balken erscheinen einfarbig, die Fläche fehlt.
 - Jede Aktualisierung parst die ganze Seite neu, inklusive Standard-Stylesheet von litehtml. Schneller ginge es mit Keep-Alive-Verbindungen (spart ~50 ms Verbindungsaufbau), einem einmal geparsten Standard-Stylesheet (Patch an litehtml) oder einem reinen Datenkanal, der nur Werte im bestehenden Dokument tauscht (litehtml sieht das nicht vor).
+
+---
+
+## 14. Architektur-Entscheidungen und offene Richtung (27./28.10.)
+
+Diese Punkte wurden besprochen, aber noch nicht umgesetzt.
+
+**Blazor-Server mit zwei Oberflächen**
+- Eine Blazor-App, gemeinsame Services (Daten, Timer, Achsen, Logik). Darauf zwei Oberflächen:
+  - `/`: normales interaktives Blazor (SignalR) für Windows-11-Browser.
+  - `/nt4/…`: Static SSR mit HTML + CSS 2.1, ohne `blazor.web.js` und ohne Reconnect-Dialog. Für litehtml, Opera 10.63 und IE 6. Aktionen über Links oder Formular-POST mit Redirect zurück, Aktualisierung per Refresh.
+  - `/nt4/…svg`: Charts als SVG ohne Text (für nanosvg und Opera).
+  - `/nt4/api/…`: reine Daten in einem einfachen Textformat (z. B. `X=…;Y=…;Z=…;A=…`), das C++ auf NT4 ohne Bibliothek liest. Für Live-Werte ist Long-Polling über eine offen gehaltene Verbindung möglich, ohne WebSocket.
+- Festes Präfix `/nt4` statt Browsererkennung über den User-Agent. Optional leitet `/` alte Browser auf `/nt4` um.
+- Die heutigen `/lite…`-Endpunkte (Abschnitte 12 und 13) sollen unter `/nt4` zusammengezogen werden.
+
+**NT4-Client: nativ plus HTML**
+- Achswerte nativ in C++ zeichnen (GDI, nur geänderte Zahlen und Balken). Die Daten kommen über den Textkanal. Dadurch entfallen das Parsen und das Layout der Seite, die in der VM etwa 230 ms von 720 ms kosten (Abschnitt 13).
+- Daneben eine litehtml-Ansicht im selben Fenster für langsamere Inhalte: Charts, Statusseiten, Doku, Einstellungen.
+- Optional das IE-6-WebBrowser-Control, falls eine Seite JavaScript braucht (siehe unten).
+- Laden und Parsen in einem Arbeitsthread, Zeichnen im UI-Thread. Das macht das Fenster bedienbarer, aber nicht schneller, weil die VM nur eine CPU hat.
+
+**WebView-Optionen auf NT4**
+
+| Komponente | Open Source | JavaScript | Einschätzung |
+|---|---|---|---|
+| Opera 10.63 (Presto) | nein | ja (ES3/ES5 teilweise) | nicht einbettbar. Presto war immer Closed Source, ein SDK gab es nur kommerziell für Geräte. Der 2017 geleakte Quellcode ist rechtlich nicht nutzbar. |
+| IE-6-WebBrowser-Control (MSHTML) | nein | ja (JScript 5.6, ES3, XHR) | praktikabelster WebView mit JS. Als COM-Control gedacht, ca. 200–300 Zeilen C++. IE 6 SP1 muss nachinstalliert werden (offiziell für NT4 SP6a). Nicht heruntergeladen, nicht getestet. |
+| Gecko (alte Mozilla-Engine, z. B. RetroZilla) | ja (MPL) | ja (ES3) | Einbettung über das alte Mozilla-ActiveX-Control bzw. XULRunner möglich, aber groß und mit alter Toolchain. Auf NT4 nicht geprüft. |
+| litehtml | ja (BSD) | nein | läuft (Abschnitte 12 und 13). |
+| NetSurf, Dillo | ja | NetSurf teilweise, Dillo nein | nicht als Komponente gedacht, NT4 fraglich. |
+
+Keine dieser Engines kann modernes JavaScript. Interaktives Blazor läuft in keiner.
+
+**Threads auf NT4**
+- NT4 hat volle Win32-Threads mit präemptivem Multitasking: `CreateThread`, Critical Sections, Events, `WaitForMultipleObjects`. `nt4-exe-test` lief mit vier `std::thread`s (winpthreads + libc++).
+- Es fehlen neuere APIs wie SRW-Locks und Condition Variables (ab Vista). EnlyzeWinCompatLib bildet die nötigen nach.
+- Die VM hat eine CPU. Zwei CPUs bräuchten den Multiprozessor-HAL von NT4, und der Wechsel ist aufwendig.
+
+**SSE auf NT4**
+- NT4 unterstützt kein SSE, auch mit keinem Service Pack. Der Kernel setzt `CR4.OSFXSR` nicht, deshalb endet jeder SSE-Befehl mit „illegal instruction“. Außerdem sichert er beim Thread-Wechsel nur den x87-Zustand (`FSAVE`), nicht die SSE-Register (`FXSAVE`).
+- SSE kam bei Windows mit Windows 2000 (und Windows 98 SE).
+- Nutzbar sind x87 und MMX (`-march=pentium-mmx`). MMX verwendet die x87-Register, die NT4 sichert.
+- Es gibt Treiber, die SSE auf NT4 erzwingen. Wegen der fehlenden Sicherung beim Thread-Wechsel können sich dann Werte zwischen Threads verfälschen. Für eine Maschinenanzeige nicht geeignet.
+
+**Rust statt C++**
+- Offiziell unterstützt Rust für Windows nur noch Windows 10 und neuer. Für NT4 gibt es die Community-Toolchain „rust9x“. Sie hinkt dem offiziellen Rust hinterher, und viele Crates brauchen neuere Windows-APIs. Das ist nicht geprüft.
+- Das SSE-Problem bestünde genauso (Zieltyp i586 nötig). Schneller als C++ wäre Rust nicht. litehtml und nanosvg müssten per FFI angebunden werden.
+- Entscheidung: bei C++ bleiben, die Toolchain läuft.
+
+**Geschwindigkeit der VM**
+- Die Hauptbremse ist der Hyper-V-Modus von VirtualBox („NEM: Snail execution mode“, Abschnitt 13). Abschalten ginge mit `bcdedit /set hypervisorlaunchtype off` und einem Neustart. Danach laufen WSL2, Docker und die Speicherintegrität (VBS) nicht mehr. Das ist eine Systementscheidung des Nutzers und nicht umgesetzt.
+
+**Laufender Server:** Die Blazor-Testapp lief als Hintergrundprozess der Claude-Sitzung und ist mit dem Sitzungsende beendet. Neu starten mit `dotnet run -c Release --no-launch-profile --urls http://192.168.178.146:5080` in `S:\workspace\nt4\src\nt4-blazor`.

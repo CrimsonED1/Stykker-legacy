@@ -48,6 +48,13 @@ Notes and sources from bringing up a Windows NT 4.0 SP6 test machine in VirtualB
 - Speed in this VM: the axis page needs about 720 ms per cycle (load ~110, parse ~230, draw ~60, blit ~1 ms), the chart page about 2.7 s. The host runs Hyper-V, so VirtualBox falls back to NEM "snail execution mode" and the guest runs 20 to 30 times slower than the host. Details in `docs/nt4-status.md`, section 13.
 - Limits: no JavaScript, no form controls, SVG only for images. Each refresh reloads and re-renders the whole page.
 
+## Direction (not built yet)
+
+- One Blazor app with shared services and two front ends: interactive Blazor at `/` for current browsers, and `/nt4/…` for NT 4 (static SSR pages with CSS 2.1, SVG charts, and a plain-text data API for live values, optionally long-polling).
+- NT 4 client: axis values drawn natively in C++ from the data API, plus a litehtml view for slower pages. The IE 6 WebBrowser control is the only practical embeddable view with JavaScript on NT 4. Opera/Presto is closed source and cannot be embedded.
+- NT 4 has full Win32 threads, but no SSE (the kernel never enables it and does not save SSE state). C++ stays; Rust would need the community rust9x toolchain.
+- Details and the reasoning are in `docs/nt4-status.md`, section 14.
+
 ## Not included
 
 - Binaries, ISOs, screenshots, the VM disk.
