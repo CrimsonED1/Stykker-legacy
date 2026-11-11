@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Nt4Blazor;
 using Nt4Blazor.Components;
 using Nt4Blazor.Components.Lite;
+using Nt4Blazor.Dnc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,8 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSingleton<LiteTimer>();
 builder.Services.AddSingleton<LiteChartData>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<LiteChartData>());
+builder.Services.Configure<DncOptions>(builder.Configuration.GetSection("Dnc"));
+builder.Services.AddSingleton<DncStore>();
 
 var app = builder.Build();
 
@@ -30,6 +33,9 @@ app.MapGet("/api/zeit", () => DateTime.Now.ToString("HH:mm:ss"));
 
 // NT 4 pages, SVG and text API under /nt4 (and /lite as alias for older NT4LITE.EXE builds).
 Nt4Routes.Map(app);
+
+// CNC program transfer for NT4DNC.EXE (plain text API under /nt4/api/dnc).
+DncRoutes.Map(app);
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

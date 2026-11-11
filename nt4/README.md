@@ -12,7 +12,8 @@ Notes and sources from bringing up a Windows NT 4.0 SP6 test machine in VirtualB
 | `window/main.cpp`, `window/nt4-window.vcxproj` | Win32/GDI window app with the Stykker design tokens. Built with clang-cl against ENLYZE. |
 | `build-notes/*.patch` | Local changes to third-party sources, as patches. The sources themselves are not in this repo. |
 | `lite/` | `NT4LITE.EXE`: Win32 app with litehtml as an embedded HTML view (GDI drawing, HTTP over Winsock, meta refresh, accesskey links). `nt4_crt.cpp` replaces UCRT float/rounding functions that use SSE. `litehtml-nt4.vcxproj` builds litehtml for NT 4. |
-| `blazor/` | .NET 10 Blazor test app that runs on the host and is opened from NT 4 in Opera 10.63. Shows what works there: static SSR, form posts, ES3 JavaScript with XHR. Interactive Blazor Server does not. |
+| `blazor/` | .NET 10 Blazor test app that runs on the host and is opened from NT 4 in Opera 10.63. Shows what works there: static SSR, form posts, ES3 JavaScript with XHR. Interactive Blazor Server does not. Also serves the NT 4 pages under `/nt4` and the DNC API under `/nt4/api/dnc`. |
+| `dnc/` | `NT4DNC.EXE`: fetches CNC programs from the server over plain HTTP and writes them on the machine (CRC32 check, temp file and rename, backup of the old version, logs). Win32 only, no libc++, no floating point. German manual in `dnc/README.md`. |
 
 ## Build
 

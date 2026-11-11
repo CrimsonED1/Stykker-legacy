@@ -1,2 +1,4 @@
 bin/
 obj/
+# CNC programs and transfer log of the DNC test setup
+dnc/
