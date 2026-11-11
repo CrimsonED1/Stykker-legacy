@@ -71,8 +71,13 @@ Liste, neues Programm, unverändertes Programm, geändertes Programm mit Sicheru
 falscher Schlüssel, unbekanntes Programm, ungültiger Name, schreibgeschützte und gesperrte Zieldatei,
 Server nicht erreichbar, falsche Prüfsumme, abgebrochene Übertragung.
 
+**Auf NT 4 getestet (11.11.2026, VirtualBox-VM `NT4_SP6-New`, NT 4.0 SP6):** EXE und INI per ISO nach `C:\DNC`,
+Server auf der LAN-IP des Hosts, Port 5080. Kommandozeile: zwei neue Programme (107 Byte und 300 KB), die
+Prüfsummen stimmen mit dem Server überein. Fenster: Liste mit Abgleich, Rückfrage (Nein ist vorgewählt),
+geändertes Programm ersetzt, alte Fassung gesichert, Eintrag im Protokoll des Servers mit der IP.
+Die Uhr der VM ging nach dem Aufwecken nach (29.10.). Die Zeitstempel der Sicherungen kommen von der Uhr der Maschine.
+
 **Noch nicht geprüft:**
-- Lauf auf NT 4 selbst (VM oder Maschine).
 - Wohin die Programme auf einer 840D genau müssen, damit die Bediensoftware sie übernimmt. Der Zielordner ist
   deshalb einstellbar. Ob ein direkt in einen Ordner geschriebenes Programm in der Programmverwaltung der Steuerung
   erscheint, muss an einer echten Maschine geprüft werden. Bis dahin nicht in Ordner der Bediensoftware schreiben,
