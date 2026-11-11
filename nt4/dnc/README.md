@@ -30,8 +30,8 @@ bzw. „schreibgeschützt“.
 **Maschine:** `NT4DNC.example.ini` als `NT4DNC.INI` neben die EXE legen und Server, Maschinenname, Schlüssel und
 Ordner eintragen.
 
-**Server:** Die Programme liegen unter `<ProgramRoot>/<MASCHINE>/` (Vorgabe `dnc/programme/`, relativ zum
-App-Ordner). Jede Maschine braucht einen Schlüssel in `Dnc:Machines`. Echte Werte gehören nicht ins Repo, sondern
+**Server:** Die Programme liegen unter `<ProgramRoot>/<MASCHINE>/` (Vorgabe `dnc-daten/programme/`, relativ
+zum App-Ordner). Jede Maschine braucht einen Schlüssel in `Dnc:Machines`. Echte Werte gehören nicht ins Repo, sondern
 auf den Server, zum Beispiel als Umgebungsvariable:
 
 ```

@@ -1,4 +1,4 @@
 bin/
 obj/
-# CNC programs and transfer log of the DNC test setup
-dnc/
+# CNC programs and transfer log of the DNC test setup (not "dnc/": that would also match the source folder Dnc/)
+/dnc-daten/
