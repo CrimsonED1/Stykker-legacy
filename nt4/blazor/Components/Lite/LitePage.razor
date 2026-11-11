@@ -16,7 +16,7 @@
 <head>
     <meta charset="utf-8" />
     <title>Server-Timer</title>
-    <meta http-equiv="refresh" content="1;url=/lite" />
+    <meta http-equiv="refresh" content="1;url=/nt4" />
     <style>
         body { background: #060916; color: #e8eeff; font-family: Arial, sans-serif; font-size: 13px; margin: 0; padding: 10px 14px; }
         .card { background: #111a33; border: 1px solid #23305a; padding: 8px 12px; margin-bottom: 8px; }
@@ -41,20 +41,20 @@
         <span class="time">@elapsed.ToString(@"mm\:ss") / @Timer.Duration.ToString(@"mm\:ss")</span>
         <span class="muted">&nbsp; @percent % · @status</span>
         <div class="bar"><div class="fill" style="width: @(percent)%"></div></div>
-        <a class="btn" href="/lite?cmd=start" accesskey="s">Start (S)</a>
-        <a class="btn ghost" href="/lite?cmd=stop" accesskey="p">Pause (P)</a>
-        <a class="btn ghost" href="/lite?cmd=reset" accesskey="r">Reset (R)</a>
-        <a class="btn ghost" href="/lite/axes?ms=200" accesskey="a">Achsen (A)</a>
+        <a class="btn" href="/nt4?cmd=start" accesskey="s">Start (S)</a>
+        <a class="btn ghost" href="/nt4?cmd=stop" accesskey="p">Pause (P)</a>
+        <a class="btn ghost" href="/nt4?cmd=reset" accesskey="r">Reset (R)</a>
+        <a class="btn ghost" href="/nt4/axes?ms=200" accesskey="a">Achsen (A)</a>
     </div>
 
     <div class="card">
         <p class="head">Last (SVG) · aktuell @(line.Length > 0 ? Math.Round(line[^1]) : 0) %</p>
-        <img src="/lite/line.svg?v=@tick" width="560" height="110" alt="Last" />
+        <img src="/nt4/line.svg?v=@tick" width="560" height="110" alt="Last" />
     </div>
 
     <div class="card">
         <p class="head">Woche (SVG)</p>
-        <img src="/lite/bars.svg?v=@tick" width="560" height="90" alt="Woche" />
+        <img src="/nt4/bars.svg?v=@tick" width="560" height="90" alt="Woche" />
         <table width="560" class="labels"><tr>
             @for (int i = 0; i < bars.Length; i++)
             {

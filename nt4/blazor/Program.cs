@@ -28,26 +28,8 @@ app.UseAntiforgery();
 
 app.MapGet("/api/zeit", () => DateTime.Now.ToString("HH:mm:ss"));
 
-// Page for the NT 4 litehtml client. Commands redirect back so a refresh does not repeat them.
-app.MapGet("/lite", IResult (string? cmd, LiteTimer timer) =>
-{
-    switch (cmd)
-    {
-        case "start": timer.Start(); break;
-        case "stop": timer.Stop(); break;
-        case "reset": timer.Reset(); break;
-        default: return new RazorComponentResult<LitePage>();
-    }
-    return Results.Redirect("/lite");
-});
-
-app.MapGet("/lite/line.svg", (LiteChartData data) =>
-    Results.Text(data.LineSvg(560, 110), "image/svg+xml"));
-app.MapGet("/lite/bars.svg", (LiteChartData data) =>
-    Results.Text(data.BarSvg(560, 90), "image/svg+xml"));
-
-// Axis view: only text and bars, so it can refresh fast. ?ms= sets the refresh interval.
-app.MapGet("/lite/axes", (int? ms) => new RazorComponentResult<LiteAxes>(new { IntervalMs = Math.Clamp(ms ?? 200, 50, 5000) }));
+// NT 4 pages, SVG and text API under /nt4 (and /lite as alias for older NT4LITE.EXE builds).
+Nt4Routes.Map(app);
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
